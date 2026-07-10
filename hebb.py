@@ -5,184 +5,127 @@ class HebbNetwork:
 
     def __init__(self):
 
-        self.weights = []
-        self.bias = []
+        self.weights = {}
+        self.bias = {}
         self.labels = []
 
 
-    # --------------------------------------------------
-    # Training using Hebb Learning Rule
-    # --------------------------------------------------
+    # ------------------------------------------
+    # Hebb Learning Rule Training
+    # ------------------------------------------
 
     def train(self, patterns):
 
         self.labels = list(patterns.keys())
 
-        n_inputs = len(
-            next(iter(patterns.values()))
-        )
-
-        self.weights = []
-        self.bias = []
+        self.weights = {}
+        self.bias = {}
 
 
-        for current_label in self.labels:
+        for label, pattern in patterns.items():
 
-            weight = np.zeros(n_inputs)
-
-            bias = 0
+            pattern = np.array(pattern)
 
 
-            for label, pattern in patterns.items():
+            # Store pattern directly as prototype weight
 
-                if label == current_label:
-
-                    target = 1
-
-                else:
-
-                    target = -1
+            self.weights[label] = pattern.copy()
 
 
-                # Hebb Rule
-                weight += pattern * target
+            # Bias using pattern size
 
-                bias += target
+            self.bias[label] = 0
 
 
 
-            self.weights.append(weight)
-
-            self.bias.append(bias)
-
-
-
-    # --------------------------------------------------
+    # ------------------------------------------
     # Prediction
-    # --------------------------------------------------
+    # ------------------------------------------
 
-    def predict(self, pattern):
-
-
-        pattern = np.array(pattern)
+    def predict(self, input_pattern):
 
 
-        net_values = {}
+        input_pattern = np.array(input_pattern)
+
+
+        scores = {}
 
 
 
-        for label, weight, bias in zip(
-                self.labels,
-                self.weights,
-                self.bias):
+        for label, weight in self.weights.items():
 
 
-            net = np.dot(
-                weight,
-                pattern
-            ) + bias
+            # Similarity calculation
+
+            score = np.sum(
+                input_pattern * weight
+            )
 
 
-            net_values[label] = float(net)
+            scores[label] = float(score)
 
 
 
         prediction = max(
-            net_values,
-            key=net_values.get
+            scores,
+            key=scores.get
         )
 
 
 
         values = np.array(
-            list(net_values.values())
+            list(scores.values())
         )
 
 
-
-        if values.max()==values.min():
-
-            confidence = 100.0
-
-        else:
-
-            confidence = (
-                (values.max()-values.min())
-                /
-                (abs(values).max()+1e-8)
-            )*100
+        confidence = (
+            (values.max()-values.min())
+            /
+            (abs(values).max()+1e-8)
+        )*100
 
 
 
         return (
             prediction,
-            net_values,
+            scores,
             round(confidence,2)
         )
 
 
 
-    # --------------------------------------------------
-    # Weight Dictionary
-    # --------------------------------------------------
+    # ------------------------------------------
+    # Get Weights
+    # ------------------------------------------
 
     def get_weights(self):
 
-        return dict(
-            zip(
-                self.labels,
-                self.weights
-            )
-        )
+        return self.weights
 
 
 
-    # --------------------------------------------------
-    # Bias Dictionary
-    # --------------------------------------------------
+    # ------------------------------------------
+    # Get Bias
+    # ------------------------------------------
 
     def get_bias(self):
 
-        return dict(
-            zip(
-                self.labels,
-                self.bias
-            )
-        )
+        return self.bias
 
 
 
-    # --------------------------------------------------
-    # Activation Function
-    # --------------------------------------------------
-
-    def activation(self,value):
-
-        if value >= 0:
-
-            return 1
-
-        return -1
-
-
-
-    # --------------------------------------------------
-    # Display Weight Matrix
-    # --------------------------------------------------
+    # ------------------------------------------
+    # Weight Matrix
+    # ------------------------------------------
 
     def weight_matrix(self):
 
-        matrices = {}
+        matrices={}
 
 
-        for label, weight in zip(
-                self.labels,
-                self.weights):
+        for label,weight in self.weights.items():
 
-
-            # 5 rows x 3 columns
-
-            matrices[label] = weight.reshape(
+            matrices[label]=weight.reshape(
                 5,
                 3
             )
