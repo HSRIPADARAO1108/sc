@@ -8,6 +8,7 @@ from hebb import HebbNetwork
 from preprocess import preprocess_image
 
 
+
 # ------------------------------------------
 # Page Setup
 # ------------------------------------------
@@ -19,33 +20,37 @@ st.set_page_config(
 )
 
 
+
 # ------------------------------------------
 # Title
 # ------------------------------------------
 
-st.title("🧠 Hebb Character Recognition System")
+st.title(
+    "🧠 Hebb Character Recognition System"
+)
+
 
 st.write(
 """
-Recognition of characters using **Hebb Learning Rule**
+Character Recognition using **Hebb Learning Rule**
 
 Supported Characters:
 
-L | T | H | I | E
+**L | T | H | I | E**
 """
 )
 
 
-st.markdown("---")
+st.divider()
 
 
 
 # ------------------------------------------
-# Mode
+# Mode Selection
 # ------------------------------------------
 
 mode = st.radio(
-    "Select Input Type",
+    "Select Data Type",
     [
         "Binary",
         "Bipolar"
@@ -55,7 +60,7 @@ mode = st.radio(
 
 
 # ------------------------------------------
-# Options
+# Controls
 # ------------------------------------------
 
 col1,col2 = st.columns(2)
@@ -72,27 +77,31 @@ with col1:
 with col2:
 
     debug = st.checkbox(
-        "Show Processing",
+        "Show Processing Steps",
         True
     )
 
 
 
-with st.expander("Advanced"):
+with st.expander(
+    "Advanced Settings"
+):
+
 
     stroke_boost = st.slider(
-        "Stroke Boost",
+        "Stroke Thickness",
         0,
         5,
-        2
+        1
     )
 
 
     threshold = st.slider(
-        "Sensitivity",
+        "Cell Threshold",
         0.1,
         0.8,
-        0.3
+        0.4,
+        0.05
     )
 
 
@@ -118,7 +127,7 @@ if file:
     try:
 
 
-        # Display image
+        # Show original
 
         img = Image.open(file)
 
@@ -132,7 +141,7 @@ if file:
 
 
         # ----------------------------------
-        # Select Training Pattern
+        # Select Patterns
         # ----------------------------------
 
         if mode=="Binary":
@@ -146,17 +155,14 @@ if file:
 
 
         # ----------------------------------
-        # Train Network
+        # Train Hebb Network
         # ----------------------------------
 
         network = HebbNetwork()
 
-
-        # Multiple Hebb updates
-
-        for epoch in range(5):
-
-            network.train(patterns)
+        network.train(
+            patterns
+        )
 
 
 
@@ -177,16 +183,18 @@ if file:
             )
 
 
-            st.markdown("---")
+            st.divider()
 
             st.subheader(
-                "Preprocessing"
+                "Preprocessing Steps"
             )
 
 
             c1,c2,c3 = st.columns(3)
 
 
+
+            # Cropped
 
             with c1:
 
@@ -199,11 +207,11 @@ if file:
                 crop=np.array(cropped)
 
 
-                if crop.max()<=1:
-
-                    crop=(crop*255).astype(
-                        np.uint8
-                    )
+                crop = (
+                    crop*255
+                ).astype(
+                    np.uint8
+                )
 
 
                 st.image(
@@ -213,6 +221,8 @@ if file:
                 )
 
 
+
+            # Grid
 
             with c2:
 
@@ -254,10 +264,21 @@ if file:
 
                     st.image(
                         preview,
-                        width=150
+                        width=150,
+                        clamp=True
                     )
 
 
+                else:
+
+
+                    st.error(
+                        "Grid size error"
+                    )
+
+
+
+            # Matrix
 
             with c3:
 
@@ -292,16 +313,18 @@ if file:
         # Prepare Input
         # ----------------------------------
 
-        sample=np.array(sample).flatten()
+        sample=np.array(
+            sample
+        ).flatten()
 
 
 
-        if sample.size!=15:
+        if sample.size != 15:
 
 
             st.error(
-                f"""
-Wrong input size.
+f"""
+Invalid input.
 
 Expected 15 pixels
 
@@ -312,6 +335,8 @@ Received {sample.size}
             st.stop()
 
 
+
+        # Bipolar conversion
 
         if mode=="Bipolar":
 
@@ -324,10 +349,11 @@ Received {sample.size}
 
 
         # ----------------------------------
-        # Input Display
+        # Display Input
         # ----------------------------------
 
-        st.markdown("---")
+        st.divider()
+
 
         st.subheader(
             "Input Pattern"
@@ -354,18 +380,18 @@ Received {sample.size}
 
 
         st.success(
-            f"Prediction : {prediction}"
+            f"🎯 Prediction : {prediction}"
         )
 
 
         st.info(
-            f"Confidence : {confidence:.2f}%"
+            f"Confidence : {confidence}%"
         )
 
 
 
         # ----------------------------------
-        # Net Scores
+        # Scores
         # ----------------------------------
 
         st.subheader(
@@ -373,32 +399,33 @@ Received {sample.size}
         )
 
 
-        result=pd.DataFrame(
+        df=pd.DataFrame(
             {
                 "Character":
-                net_values.keys(),
+                list(net_values.keys()),
 
                 "Score":
-                net_values.values()
+                list(net_values.values())
             }
         )
 
 
-        result=result.sort_values(
+        df=df.sort_values(
             "Score",
             ascending=False
         )
 
 
-        st.table(result)
+        st.table(df)
 
 
 
         # ----------------------------------
-        # Weight Display
+        # Weight Matrix
         # ----------------------------------
 
-        st.markdown("---")
+        st.divider()
+
 
         st.subheader(
             "Hebb Weight Matrix"
@@ -417,7 +444,7 @@ Received {sample.size}
 
 
             st.table(
-                weight.reshape(
+                np.array(weight).reshape(
                     5,
                     3
                 )
@@ -429,7 +456,7 @@ Received {sample.size}
         # Explanation
         # ----------------------------------
 
-        st.markdown("---")
+        st.divider()
 
 
         st.subheader(
@@ -439,19 +466,19 @@ Received {sample.size}
 
         st.write(
 f"""
-1. Image converted into 5×3 binary pattern.
+1. Image is converted into a 5×3 binary pattern.
 
-2. Hebb rule updates weights.
+2. Hebb learning rule calculates weights.
 
-3. Net calculation:
+3. Net value:
 
 Net = W × X + B
 
-4. Maximum net value character is selected.
+4. Highest score character is selected.
 
-Final Result:
+Final Character:
 
-{prediction}
+## {prediction}
 """
         )
 
