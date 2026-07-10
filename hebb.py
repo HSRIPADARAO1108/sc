@@ -11,7 +11,7 @@ class HebbNetwork:
 
 
     # ------------------------------------------
-    # Hebb Learning Rule Training
+    # Training
     # ------------------------------------------
 
     def train(self, patterns):
@@ -24,15 +24,17 @@ class HebbNetwork:
 
         for label, pattern in patterns.items():
 
-            pattern = np.array(pattern)
+            pattern = np.array(
+                pattern
+            )
 
 
-            # Store pattern directly as prototype weight
+            # Store character prototype
 
             self.weights[label] = pattern.copy()
 
 
-            # Bias using pattern size
+            # Bias
 
             self.bias[label] = 0
 
@@ -45,50 +47,61 @@ class HebbNetwork:
     def predict(self, input_pattern):
 
 
-        input_pattern = np.array(input_pattern)
+        input_pattern = np.array(
+            input_pattern
+        )
 
 
-        scores = {}
+        net_values = {}
 
 
 
         for label, weight in self.weights.items():
 
 
-            # Similarity calculation
+            # Similarity score
 
-            score = np.sum(
-                input_pattern * weight
+            score = np.dot(
+                weight,
+                input_pattern
             )
 
 
-            scores[label] = float(score)
+            net_values[label] = float(
+                score
+            )
 
 
 
         prediction = max(
-            scores,
-            key=scores.get
+            net_values,
+            key=net_values.get
         )
 
 
 
         values = np.array(
-            list(scores.values())
+            list(net_values.values())
         )
 
 
-        confidence = (
-            (values.max()-values.min())
-            /
-            (abs(values).max()+1e-8)
-        )*100
+        if abs(values).max()==0:
+
+            confidence = 0
+
+        else:
+
+            confidence = (
+                (values.max()-values.min())
+                /
+                abs(values).max()
+            )*100
 
 
 
         return (
             prediction,
-            scores,
+            net_values,
             round(confidence,2)
         )
 
@@ -120,15 +133,15 @@ class HebbNetwork:
 
     def weight_matrix(self):
 
-        matrices={}
+        result={}
 
 
         for label,weight in self.weights.items():
 
-            matrices[label]=weight.reshape(
+            result[label]=np.array(weight).reshape(
                 5,
                 3
             )
 
 
-        return matrices
+        return result
