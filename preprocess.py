@@ -1,55 +1,74 @@
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
+from collections import deque
 
 
-def _otsu_threshold(img_np):
+def _connected_components(binary_bool):
     """
-    Compute Otsu's threshold manually with numpy (no opencv needed).
-    Returns the integer threshold (0-255) that best separates the
-    image into foreground/background.
+    Simple 8-connectivity BFS connected-component labeling in pure Python
+    (no opencv/scipy needed). Only practical because we run this on a
+    downscaled image (a few hundred px per side), not the full-res photo.
+
+    Returns a list of components, each a list of (y, x) coordinates.
     """
-    hist, _ = np.histogram(img_np, bins=256, range=(0, 256))
-    total = img_np.size
+    h, w = binary_bool.shape
+    visited = np.zeros_like(binary_bool, dtype=bool)
+    components = []
 
-    sum_total = np.dot(np.arange(256), hist)
-    sum_b = 0.0
-    weight_b = 0.0
-    max_variance = 0.0
-    threshold = 127  # sane fallback
+    neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
+                 (-1, -1), (-1, 1), (1, -1), (1, 1)]
 
-    for t in range(256):
-        weight_b += hist[t]
-        if weight_b == 0:
-            continue
+    for i in range(h):
+        for j in range(w):
+            if binary_bool[i, j] and not visited[i, j]:
+                queue = deque([(i, j)])
+                visited[i, j] = True
+                comp = []
+                while queue:
+                    y, x = queue.popleft()
+                    comp.append((y, x))
+                    for dy, dx in neighbors:
+                        ny, nx = y + dy, x + dx
+                        if (0 <= ny < h and 0 <= nx < w
+                                and binary_bool[ny, nx]
+                                and not visited[ny, nx]):
+                            visited[ny, nx] = True
+                            queue.append((ny, nx))
+                components.append(comp)
 
-        weight_f = total - weight_b
-        if weight_f == 0:
-            break
+    return components
 
-        sum_b += t * hist[t]
-        mean_b = sum_b / weight_b
-        mean_f = (sum_total - sum_b) / weight_f
 
-        variance_between = weight_b * weight_f * (mean_b - mean_f) ** 2
+def _isolate_character(binary_255, min_size_fraction=0.15):
+    """
+    Keep only the connected blob(s) that plausibly ARE the character (the
+    largest blob, plus any others at least `min_size_fraction` of its
+    size, to tolerate a pen stroke that got split into 2-3 pieces).
+    Zeroes out everything else — isolated noise specks that survived
+    thresholding but aren't part of the real stroke.
+    """
+    components = _connected_components(binary_255 > 0)
+    if not components:
+        return binary_255
 
-        if variance_between > max_variance:
-            max_variance = variance_between
-            threshold = t
+    sizes = [len(c) for c in components]
+    max_size = max(sizes)
+    keep_threshold = max(3, max_size * min_size_fraction)
 
-    return threshold
+    cleaned = np.zeros_like(binary_255)
+    for comp, size in zip(components, sizes):
+        if size >= keep_threshold:
+            ys = [p[0] for p in comp]
+            xs = [p[1] for p in comp]
+            cleaned[ys, xs] = 255
+
+    return cleaned
 
 
 def _dilate(binary_255, iterations=1):
     """
     Thicken white (255) strokes by 'iterations' pixels in every direction.
-    Pure-numpy morphological dilation (no opencv/scipy needed) using a
-    3x3 cross-shaped structuring element.
-
-    Why this matters: thin pen/font strokes (often just 1-3px wide in a
-    cropped image) get averaged toward 0 when box-downsized into a tiny
-    3x5 grid, silently erasing entire bars/columns. Thickening the stroke
-    BEFORE downsizing ensures it still contributes meaningfully to the
-    cell average it lands in.
+    Pure-numpy morphological dilation using a 3x3 cross-shaped element.
     """
     result = binary_255.astype(np.uint8)
     for _ in range(iterations):
@@ -68,57 +87,74 @@ def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False,
     Convert an uploaded character image into a 3x5 (15-pixel) binary/bipolar
     pattern compatible with the patterns trained in patterns.py.
 
-    Pipeline (pure PIL + numpy, no opencv):
-      1. Grayscale conversion
-      2. Otsu thresholding -> clean binary image (0 / 255)
-      3. Automatic background detection (so the character is always the
-         foreground/white pixels, regardless of upload color scheme)
-      4. Crop to the bounding box of the character, with a small margin
-      5. Dilate (thicken) the stroke so thin lines survive downsizing
-      6. Resize the cropped character to 3x5 using PIL's BOX filter
-         (averages pixels, similar to opencv's INTER_AREA)
-      7. Threshold each cell using a fraction of the max cell value
-         (adaptive, so it isn't thrown off by thin/faint strokes)
-      8. Flatten row-major (matches patterns.py layout) and convert to
+    Real photos of paper have two problems a naive threshold can't handle:
+      (a) fine texture/grain/JPEG noise scattered across the whole sheet
+      (b) large-scale lighting gradients / shadows (vignetting) that are
+          genuinely dark over big areas, not just noise
+
+    This pipeline handles both:
+      1. Grayscale conversion, downscaled to a manageable working size
+      2. Illumination correction: estimate the local background shading
+         with a large-radius blur, then flag pixels that are much darker
+         than their OWN neighborhood as ink. This cancels out shadows/
+         vignetting since they vary slowly and get absorbed into the
+         "local background" estimate, while ink is a sharp local outlier.
+      3. Automatic background polarity detection + optional manual invert
+      4. Connected-component filtering: keep only the blob(s) that are
+         big enough to plausibly be the character, discard leftover
+         scattered noise specks
+      5. Crop to the bounding box of the surviving stroke, with a margin
+      6. Dilate (thicken) the stroke so thin lines survive downsizing
+      7. Resize to 3x5 using PIL's BOX filter (area-averaging)
+      8. Adaptive per-cell threshold (fraction of the grid's own max)
+      9. Flatten row-major (matches patterns.py) and convert to
          bipolar (-1/1) if required
 
     Parameters
     ----------
     stroke_boost : int
-        Number of dilation passes applied before downsizing. Increase this
-        (e.g. to 3-4) if you're photographing thin pen/pencil writing.
-        Set to 0 to disable (useful for already-thick block characters).
+        Dilation passes applied before downsizing. Raise this for thin
+        pen/pencil writing; lower/disable for already-thick block chars.
     on_threshold : float
         Fraction (0-1) of the resized grid's max intensity a cell must
-        reach to be counted as "on". Lower this if characters are still
-        coming out too sparse; raise it if noise is being picked up.
+        reach to count as "on". Lower = more sensitive to faint/thin
+        strokes; higher = stricter (less noise-prone).
     """
 
-    # ---- 1. Load & grayscale -----------------------------------------
+    # ---- 1. Load, grayscale, downscale ---------------------------------
     img = Image.open(uploaded_file).convert("L")
-    img_np = np.array(img)
+    max_dim = 400
+    if max(img.size) > max_dim:
+        img.thumbnail((max_dim, max_dim), Image.LANCZOS)
 
-    # ---- 2. Otsu threshold -> binary 0/255 ----------------------------
-    thresh = _otsu_threshold(img_np)
-    binary = np.where(img_np > thresh, 255, 0).astype(np.uint8)
+    arr = np.array(img).astype(np.float64)
+    w, h = img.size
 
-    # ---- 3. Make sure character pixels are white (255) -----------------
-    corners = [
-        binary[0, 0], binary[0, -1],
-        binary[-1, 0], binary[-1, -1]
-    ]
-    background_is_white = sum(c == 255 for c in corners) >= 2
+    # ---- 2. Illumination-corrected ink detection ------------------------
+    # Blur radius must be well beyond typical stroke width so the local
+    # "background" estimate isn't itself dragged down by the ink.
+    radius = max(w, h) // 4
+    bg = np.array(img.filter(ImageFilter.GaussianBlur(radius=radius))).astype(np.float64)
+    diff = np.clip(bg - arr, 0, None)   # positive where pixel is darker than its surroundings
+    dmax = diff.max()
 
-    if background_is_white:
-        binary = 255 - binary
+    if dmax > 0:
+        binary = (diff > dmax * 0.20).astype(np.uint8) * 255
+    else:
+        binary = np.zeros_like(arr, dtype=np.uint8)
 
+    # ---- 3. Manual invert override (rarely needed with illumination
+    #          correction, but kept for edge cases / light-on-dark ink) --
     if invert:
         binary = 255 - binary
 
-    # ---- 4. Crop to bounding box of the character (+ small margin) ------
+    # ---- 4. Drop scattered noise, keep the real stroke -------------------
+    binary = _isolate_character(binary)
+
+    # ---- 5. Crop to bounding box of the character (+ small margin) ------
     ys, xs = np.where(binary > 0)
     if len(xs) > 0 and len(ys) > 0:
-        margin = 2
+        margin = 3
         x_min = max(0, xs.min() - margin)
         x_max = min(binary.shape[1] - 1, xs.max() + margin)
         y_min = max(0, ys.min() - margin)
@@ -128,16 +164,16 @@ def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False,
         # Nothing detected (blank image) — fall back to the full frame
         cropped = binary
 
-    # ---- 5. Thicken thin strokes before downsizing ------------------------
+    # ---- 6. Thicken thin strokes before downsizing ------------------------
     if stroke_boost > 0:
         cropped = _dilate(cropped, iterations=stroke_boost)
 
-    # ---- 6. Resize to 3x5 using PIL's BOX (area-averaging) filter ---------
+    # ---- 7. Resize to 3x5 using PIL's BOX (area-averaging) filter ---------
     cropped_img = Image.fromarray(cropped.astype(np.uint8), mode="L")
     resized_img = cropped_img.resize((3, 5), resample=Image.BOX)
     resized = np.array(resized_img).astype(np.float64)
 
-    # ---- 7. Adaptive threshold (fraction of the grid's own max value) -----
+    # ---- 8. Adaptive threshold (fraction of the grid's own max value) -----
     max_val = resized.max()
     if max_val > 0:
         final_binary = np.where(resized >= max_val * on_threshold, 1, 0)
@@ -149,7 +185,7 @@ def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False,
     if debug:
         return pattern, cropped, resized
 
-    # ---- 8. Binary or Bipolar -------------------------------------------
+    # ---- 9. Binary or Bipolar -------------------------------------------
     if mode == "Binary":
         return pattern
     else:
