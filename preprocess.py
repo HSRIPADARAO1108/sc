@@ -1,6 +1,42 @@
 from PIL import Image
 import numpy as np
-import cv2
+
+
+def _otsu_threshold(img_np):
+    """
+    Compute Otsu's threshold manually with numpy (no opencv needed).
+    Returns the integer threshold (0-255) that best separates the
+    image into foreground/background.
+    """
+    hist, _ = np.histogram(img_np, bins=256, range=(0, 256))
+    total = img_np.size
+
+    sum_total = np.dot(np.arange(256), hist)
+    sum_b = 0.0
+    weight_b = 0.0
+    max_variance = 0.0
+    threshold = 127  # sane fallback
+
+    for t in range(256):
+        weight_b += hist[t]
+        if weight_b == 0:
+            continue
+
+        weight_f = total - weight_b
+        if weight_f == 0:
+            break
+
+        sum_b += t * hist[t]
+        mean_b = sum_b / weight_b
+        mean_f = (sum_total - sum_b) / weight_f
+
+        variance_between = weight_b * weight_f * (mean_b - mean_f) ** 2
+
+        if variance_between > max_variance:
+            max_variance = variance_between
+            threshold = t
+
+    return threshold
 
 
 def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False):
@@ -8,21 +44,14 @@ def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False):
     Convert an uploaded character image into a 3x5 (15-pixel) binary/bipolar
     pattern compatible with the patterns trained in patterns.py.
 
-    Why the old version failed on T / H / I:
-    A naive `img.resize((3, 5))` squashes the ENTIRE image (including empty
-    margins) into a 3x5 grid using blurry interpolation, and never checks
-    whether the background is black or white. Since the trained patterns are
-    tight outlines that exactly fill their 3x5 grid, any uploaded image that
-    isn't already perfectly cropped/colored produces a mismatched pattern.
-
-    This version fixes that with:
+    Pipeline (pure PIL + numpy, no opencv):
       1. Grayscale conversion
       2. Otsu thresholding -> clean binary image (0 / 255)
       3. Automatic background detection (so the character is always the
          foreground/white pixels, regardless of upload color scheme)
       4. Crop to the bounding box of the character (removes empty margins)
-      5. Resize the cropped character to 3x5 using AREA interpolation
-         (averages pixels instead of blurring/skipping them)
+      5. Resize the cropped character to 3x5 using PIL's BOX filter
+         (averages pixels, similar to opencv's INTER_AREA)
       6. Re-threshold to obtain crisp 0/1 pixels
       7. Flatten row-major (matches patterns.py layout) and convert to
          bipolar (-1/1) if required
@@ -33,9 +62,8 @@ def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False):
     img_np = np.array(img)
 
     # ---- 2. Otsu threshold -> binary 0/255 ----------------------------
-    _, binary = cv2.threshold(
-        img_np, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-    )
+    thresh = _otsu_threshold(img_np)
+    binary = np.where(img_np > thresh, 255, 0).astype(np.uint8)
 
     # ---- 3. Make sure character pixels are white (255) -----------------
     # Sample the four corners to guess the background colour. If most
@@ -64,10 +92,10 @@ def preprocess_image(uploaded_file, mode="Binary", invert=False, debug=False):
         # Nothing detected (blank image) — fall back to the full frame
         cropped = binary
 
-    # ---- 5. Resize to 3x5 using area interpolation -----------------------
-    resized = cv2.resize(
-        cropped.astype(np.uint8), (3, 5), interpolation=cv2.INTER_AREA
-    )
+    # ---- 5. Resize to 3x5 using PIL's BOX (area-averaging) filter ---------
+    cropped_img = Image.fromarray(cropped.astype(np.uint8), mode="L")
+    resized_img = cropped_img.resize((3, 5), resample=Image.BOX)
+    resized = np.array(resized_img)
 
     # ---- 6. Re-threshold (majority vote per cell) --------------------------
     final_binary = np.where(resized > 127, 1, 0)
