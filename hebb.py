@@ -6,23 +6,30 @@ import numpy as np
 class HebbNetwork:
 
     def __init__(self):
-
+        # Stores weight vector for each character
         self.weights = []
+
+        # Stores bias for each character
         self.bias = []
+
+        # Stores character labels
         self.labels = []
 
     # -------------------------------------------------
-    # Train the Hebb Network
+    # Train Hebb Network
     # -------------------------------------------------
     def train(self, patterns):
 
+        # Store labels
         self.labels = list(patterns.keys())
 
+        # Number of inputs (15 for 3x5)
         size = len(next(iter(patterns.values())))
 
         self.weights = []
         self.bias = []
 
+        # Train one neuron for each character
         for label in self.labels:
 
             weight = np.zeros(size)
@@ -30,7 +37,7 @@ class HebbNetwork:
 
             for name, pattern in patterns.items():
 
-                # Target Output
+                # Desired output
                 if name == label:
                     target = 1
                 else:
@@ -39,7 +46,7 @@ class HebbNetwork:
                 # Hebb Learning Rule
                 weight = weight + (pattern * target)
 
-                # Bias Update
+                # Bias update
                 bias = bias + target
 
             self.weights.append(weight)
@@ -52,6 +59,7 @@ class HebbNetwork:
 
         net_values = {}
 
+        # Calculate net value for every character
         for label, weight, bias in zip(
                 self.labels,
                 self.weights,
@@ -61,21 +69,31 @@ class HebbNetwork:
 
             net_values[label] = float(net)
 
-        # Character having highest net value
+        # Character having maximum net value
         prediction = max(net_values, key=net_values.get)
 
         return prediction, net_values
 
     # -------------------------------------------------
-    # Get Weight Matrix
+    # Return Weight Matrix
     # -------------------------------------------------
     def get_weights(self):
 
-        return dict(zip(self.labels, self.weights))
+        weights = {}
+
+        for label, weight in zip(self.labels, self.weights):
+            weights[label] = weight
+
+        return weights
 
     # -------------------------------------------------
-    # Get Bias Values
+    # Return Bias
     # -------------------------------------------------
     def get_bias(self):
 
-        return dict(zip(self.labels, self.bias))
+        bias_values = {}
+
+        for label, bias in zip(self.labels, self.bias):
+            bias_values[label] = bias
+
+        return bias_values
