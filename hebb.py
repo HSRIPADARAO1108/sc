@@ -7,59 +7,75 @@ class HebbNetwork:
 
     def __init__(self):
 
-        self.weights = None
-        self.bias = 0
+        self.weights = []
+        self.bias = []
         self.labels = []
 
-    # -----------------------------
-    # Training
-    # -----------------------------
+    # -------------------------------------------------
+    # Train the Hebb Network
+    # -------------------------------------------------
     def train(self, patterns):
 
         self.labels = list(patterns.keys())
 
-        n = len(self.labels)
-
         size = len(next(iter(patterns.values())))
 
         self.weights = []
-
         self.bias = []
 
         for label in self.labels:
 
-            w = np.zeros(size)
-
-            b = 0
+            weight = np.zeros(size)
+            bias = 0
 
             for name, pattern in patterns.items():
 
+                # Target Output
                 if name == label:
                     target = 1
                 else:
                     target = -1
 
-                w = w + pattern * target
+                # Hebb Learning Rule
+                weight = weight + (pattern * target)
 
-                b = b + target
+                # Bias Update
+                bias = bias + target
 
-            self.weights.append(w)
+            self.weights.append(weight)
+            self.bias.append(bias)
 
-            self.bias.append(b)
-
-    # -----------------------------
-    # Prediction
-    # -----------------------------
+    # -------------------------------------------------
+    # Predict Character
+    # -------------------------------------------------
     def predict(self, pattern):
 
-        nets = []
+        net_values = {}
 
-        for w, b in zip(self.weights, self.bias):
+        for label, weight, bias in zip(
+                self.labels,
+                self.weights,
+                self.bias):
 
-            net = np.dot(w, pattern) + b
+            net = np.dot(weight, pattern) + bias
 
-            nets.append(net)
+            net_values[label] = float(net)
 
-        index = np.argmax(nets)
+        # Character having highest net value
+        prediction = max(net_values, key=net_values.get)
 
-        return self.labels[index], nets[index]
+        return prediction, net_values
+
+    # -------------------------------------------------
+    # Get Weight Matrix
+    # -------------------------------------------------
+    def get_weights(self):
+
+        return dict(zip(self.labels, self.weights))
+
+    # -------------------------------------------------
+    # Get Bias Values
+    # -------------------------------------------------
+    def get_bias(self):
+
+        return dict(zip(self.labels, self.bias))
