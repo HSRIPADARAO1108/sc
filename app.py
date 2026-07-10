@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 from PIL import Image
 
 from patterns import patterns_binary, patterns_bipolar
@@ -49,6 +50,34 @@ mode = st.radio(
 )
 
 # ------------------------------------------
+# Preprocessing Options
+# ------------------------------------------
+
+col1, col2 = st.columns(2)
+
+with col1:
+    invert_colors = st.checkbox(
+        "Invert Colors",
+        value=False,
+        help="Tick this if the app is picking up the background instead "
+             "of your character (auto-detection guessed wrong)."
+    )
+
+with col2:
+    show_debug = st.checkbox(
+        "Show Preprocessing Steps",
+        value=True,
+        help="Displays the cropped and resized versions of your image so "
+             "you can see exactly what the network is seeing."
+    )
+
+st.caption(
+    "💡 Tip: draw/write your character as a **thick, bold stroke** with "
+    "plenty of contrast against the background, and try to keep it "
+    "roughly centered in the image."
+)
+
+# ------------------------------------------
 # Upload Image
 # ------------------------------------------
 
@@ -93,13 +122,39 @@ if uploaded_file is not None:
     # Image Preprocessing
     # --------------------------------------
 
-    sample = preprocess_image(uploaded_file, mode)
+    if show_debug:
+        sample, cropped, resized = preprocess_image(
+            uploaded_file, mode, invert=invert_colors, debug=True
+        )
+
+        st.markdown("---")
+        st.subheader("Preprocessing Steps")
+
+        d1, d2 = st.columns(2)
+        with d1:
+            st.write("**1. Cropped to bounding box**")
+            st.image(cropped, width=150, clamp=True)
+        with d2:
+            st.write("**2. Resized to 3×5 grid**")
+            st.image(
+                np.kron(resized, np.ones((20, 20))),
+                width=150,
+                clamp=True
+            )
+
+        # Re-derive the final pattern in the requested mode
+        if mode == "Bipolar":
+            sample = np.where(sample == 0, -1, 1)
+    else:
+        sample = preprocess_image(
+            uploaded_file, mode, invert=invert_colors
+        )
 
     st.markdown("---")
 
     st.subheader("Processed Input Pattern")
 
-    st.table(sample.reshape(5,3))
+    st.table(sample.reshape(5, 3))
 
     # --------------------------------------
     # Prediction
@@ -154,7 +209,7 @@ is selected as the recognized character.
 
         st.write(f"### Character : {label}")
 
-        st.table(weight.reshape(5,3))
+        st.table(weight.reshape(5, 3))
 
     # --------------------------------------
     # Bias Values
@@ -180,7 +235,8 @@ is selected as the recognized character.
     st.subheader("Explanation")
 
     st.write(f"""
-1. The uploaded image is converted into a **3×5 binary/bipolar pattern**.
+1. The uploaded image is converted into a **3×5 binary/bipolar pattern**
+   (cropped to the character's bounding box, then resized).
 
 2. The Hebb Network compares this pattern with all trained character patterns.
 
