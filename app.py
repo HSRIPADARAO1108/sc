@@ -7,6 +7,7 @@ from patterns import patterns_binary, patterns_bipolar
 from hebb import HebbNetwork
 from preprocess import preprocess_image
 
+
 # ------------------------------------------
 # Page Configuration
 # ------------------------------------------
@@ -16,6 +17,7 @@ st.set_page_config(
     page_icon="🧠",
     layout="centered"
 )
+
 
 # ------------------------------------------
 # Title
@@ -28,20 +30,21 @@ st.write(
 This application demonstrates **Character Recognition**
 using the **Hebb Learning Rule**.
 
-Supported Characters
+Supported Characters:
 
-• L
-• T
-• H
-• I
-• E
+- L
+- T
+- H
+- I
+- E
 """
 )
 
 st.markdown("---")
 
+
 # ------------------------------------------
-# Select Data Type
+# Data Type
 # ------------------------------------------
 
 mode = st.radio(
@@ -49,50 +52,55 @@ mode = st.radio(
     ["Binary", "Bipolar"]
 )
 
+
 # ------------------------------------------
-# Preprocessing Options
+# Preprocessing Controls
 # ------------------------------------------
 
 col1, col2 = st.columns(2)
 
+
 with col1:
+
     invert_colors = st.checkbox(
         "Invert Colors",
-        value=False,
-        help="Tick this if the app is picking up the background instead "
-             "of your character (auto-detection guessed wrong)."
+        value=False
     )
+
 
 with col2:
+
     show_debug = st.checkbox(
         "Show Preprocessing Steps",
-        value=True,
-        help="Displays the cropped and resized versions of your image so "
-             "you can see exactly what the network is seeing."
+        value=True
     )
 
-with st.expander("Advanced: fine-tune preprocessing"):
+
+with st.expander("Advanced Settings"):
+
     stroke_boost = st.slider(
-        "Stroke Thickness Boost", 0, 5, 2,
-        help="Thickens thin pen/pencil/font strokes before downsizing to "
-             "3x5, so they don't get averaged away to nothing. Increase "
-             "this if characters keep coming out blank or wrong; "
-             "decrease it if strokes are already thick and bars are "
-             "bleeding into each other."
+        "Stroke Thickness Boost",
+        0,
+        5,
+        2
     )
+
+
     on_threshold = st.slider(
-        "Cell Sensitivity", 0.10, 0.60, 0.30, step=0.05,
-        help="How much of a 3x5 grid cell needs to be covered by the "
-             "stroke for it to count as 'on'. Lower = more sensitive "
-             "(good for faint/thin strokes). Higher = stricter "
-             "(good if you're getting extra noisy pixels)."
+        "Cell Sensitivity",
+        0.10,
+        0.60,
+        0.30,
+        step=0.05
     )
+
+
 
 st.caption(
-    "Tip: draw/write your character as a bold stroke with good contrast "
-    "against the background, and try to keep it roughly centered in the "
-    "image."
+"Draw the character clearly with high contrast and keep it centered."
 )
+
+
 
 # ------------------------------------------
 # Upload Image
@@ -100,179 +108,385 @@ st.caption(
 
 uploaded_file = st.file_uploader(
     "Upload Character Image",
-    type=["png", "jpg", "jpeg"]
+    type=["png","jpg","jpeg"]
 )
 
+
+
 # ------------------------------------------
-# Main Program
+# Main Logic
 # ------------------------------------------
 
-if uploaded_file is not None:
+if uploaded_file:
 
-    # Display Uploaded Image
-    image = Image.open(uploaded_file)
 
-    st.image(
-        image,
-        caption="Uploaded Image",
-        width=250
-    )
+    try:
 
-    # --------------------------------------
-    # Select Patterns
-    # --------------------------------------
+        image = Image.open(uploaded_file)
 
-    if mode == "Binary":
-        patterns = patterns_binary
-    else:
-        patterns = patterns_bipolar
 
-    # --------------------------------------
-    # Train Hebb Network
-    # --------------------------------------
-
-    network = HebbNetwork()
-
-    network.train(patterns)
-
-    # --------------------------------------
-    # Image Preprocessing
-    # --------------------------------------
-
-    if show_debug:
-        sample, cropped, resized = preprocess_image(
-            uploaded_file, mode, invert=invert_colors, debug=True,
-            stroke_boost=stroke_boost, on_threshold=on_threshold
+        st.image(
+            image,
+            caption="Uploaded Image",
+            width=250
         )
+
+
+        # Select Patterns
+
+        if mode == "Binary":
+
+            patterns = patterns_binary
+
+        else:
+
+            patterns = patterns_bipolar
+
+
+
+        # Train Network
+
+        network = HebbNetwork()
+
+        network.train(patterns)
+
+
+
+        # ----------------------------------
+        # Preprocessing
+        # ----------------------------------
+
+
+        if show_debug:
+
+
+            result = preprocess_image(
+                uploaded_file,
+                mode,
+                invert=invert_colors,
+                debug=True,
+                stroke_boost=stroke_boost,
+                on_threshold=on_threshold
+            )
+
+
+            sample, cropped, resized = result
+
+
+
+            st.markdown("---")
+
+            st.subheader(
+                "Preprocessing Steps"
+            )
+
+
+            c1,c2,c3 = st.columns(3)
+
+
+
+            with c1:
+
+                st.write(
+                    "Cropped Image"
+                )
+
+                st.image(
+                    cropped,
+                    width=150
+                )
+
+
+            with c2:
+
+                st.write(
+                    "5×3 Grid"
+                )
+
+
+                display_img = np.array(resized)
+
+
+                if display_img.size == 15:
+
+                    display_img = display_img.reshape(5,3)
+
+
+                    st.image(
+                        np.kron(
+                            display_img,
+                            np.ones((20,20))
+                        ),
+                        width=150
+                    )
+
+                else:
+
+                    st.warning(
+                        "Resize output is not 5×3"
+                    )
+
+
+
+            with c3:
+
+                st.write(
+                    "Pixel Values"
+                )
+
+
+                arr = np.array(resized)
+
+
+                if arr.size == 15:
+
+                    arr = arr.reshape(5,3)
+
+                    st.table(
+                        arr.astype(int)
+                    )
+
+                else:
+
+                    st.error(
+                        "Invalid resized image size"
+                    )
+
+
+
+        else:
+
+
+            sample = preprocess_image(
+                uploaded_file,
+                mode,
+                invert=invert_colors,
+                stroke_boost=stroke_boost,
+                on_threshold=on_threshold
+            )
+
+
+
+        # ----------------------------------
+        # Force 15 Pixel Vector
+        # ----------------------------------
+
+        sample = np.array(sample)
+
+
+
+        sample = sample.flatten()
+
+
+
+        if sample.size != 15:
+
+            st.error(
+                f"""
+Preprocessing Error:
+
+Expected 15 pixels (5×3)
+
+Received:
+{sample.size}
+
+Check preprocess.py output.
+"""
+            )
+
+            st.stop()
+
+
+
+        # Bipolar conversion
+
+        if mode == "Bipolar":
+
+            sample = np.where(
+                sample==0,
+                -1,
+                1
+            )
+
+
+
+        # ----------------------------------
+        # Display Pattern
+        # ----------------------------------
+
 
         st.markdown("---")
-        st.subheader("Preprocessing Steps")
 
-        d1, d2, d3 = st.columns(3)
-        with d1:
-            st.write("**1. Cropped + stroke-boosted**")
-            st.image(cropped, width=150, clamp=True)
-        with d2:
-            st.write("**2. Resized to 3×5**")
-            st.image(
-                np.kron(resized, np.ones((20, 20))),
-                width=150,
-                clamp=True
-            )
-        with d3:
-            st.write("**3. Raw cell intensity (0-255)**")
-            st.table(resized.astype(int).reshape(5, 3))
-
-        # Re-derive the final pattern in the requested mode
-        if mode == "Bipolar":
-            sample = np.where(sample == 0, -1, 1)
-    else:
-        sample = preprocess_image(
-            uploaded_file, mode, invert=invert_colors,
-            stroke_boost=stroke_boost, on_threshold=on_threshold
+        st.subheader(
+            "Processed Input Pattern"
         )
 
-    st.markdown("---")
 
-    st.subheader("Processed Input Pattern")
+        st.table(
+            sample.reshape(5,3)
+        )
 
-    st.table(sample.reshape(5, 3))
 
-    # --------------------------------------
-    # Prediction
-    # --------------------------------------
 
-    prediction, net_values = network.predict(sample)
+        # ----------------------------------
+        # Prediction
+        # ----------------------------------
 
-    st.markdown("---")
+        prediction, net_values = network.predict(
+            sample
+        )
 
-    st.success(f"✅ Predicted Character : {prediction}")
 
-    # --------------------------------------
-    # Net Values
-    # --------------------------------------
 
-    st.subheader("Net Values")
+        st.markdown("---")
 
-    df = pd.DataFrame({
-        "Character": list(net_values.keys()),
-        "Net Value": list(net_values.values())
-    })
 
-    df = df.sort_values(
-        by="Net Value",
-        ascending=False
-    )
+        st.success(
+            f"✅ Predicted Character : {prediction}"
+        )
 
-    st.table(df)
 
-    # --------------------------------------
-    # Best Match
-    # --------------------------------------
 
-    st.info(
-        f"""
-Best Match : {prediction}
+        # ----------------------------------
+        # Net Values
+        # ----------------------------------
 
-The character having the highest Net Value
-is selected as the recognized character.
+
+        st.subheader(
+            "Net Values"
+        )
+
+
+        df = pd.DataFrame(
+            {
+                "Character": list(net_values.keys()),
+
+                "Net Value": list(net_values.values())
+            }
+        )
+
+
+        df = df.sort_values(
+            "Net Value",
+            ascending=False
+        )
+
+
+        st.table(df)
+
+
+
+        # ----------------------------------
+        # Weight Matrix
+        # ----------------------------------
+
+
+        st.markdown("---")
+
+
+        st.subheader(
+            "Hebb Weight Matrices"
+        )
+
+
+        for label,weight in zip(
+            network.labels,
+            network.weights
+        ):
+
+
+            st.write(
+                f"### Character : {label}"
+            )
+
+
+            w = np.array(weight)
+
+
+            if w.size==15:
+
+                st.table(
+                    w.reshape(5,3)
+                )
+
+            else:
+
+                st.write(w)
+
+
+
+        # ----------------------------------
+        # Bias
+        # ----------------------------------
+
+
+        st.markdown("---")
+
+
+        st.subheader(
+            "Bias Values"
+        )
+
+
+        bias_df=pd.DataFrame(
+            {
+                "Character":network.labels,
+
+                "Bias":network.bias
+            }
+        )
+
+
+        st.table(
+            bias_df
+        )
+
+
+
+        # ----------------------------------
+        # Explanation
+        # ----------------------------------
+
+
+        st.markdown("---")
+
+
+        st.subheader(
+            "Explanation"
+        )
+
+
+        st.write(
+f"""
+### Working Principle
+
+1. Image is converted into a 5×3 pixel pattern.
+
+2. Hebb learning algorithm calculates weights.
+
+3. Net value:
+
+\[
+Net = W.X + B
+\]
+
+4. Character with maximum net value is selected.
+
+
+### Final Prediction:
+
+## {prediction}
+
 """
-    )
+        )
 
-    # --------------------------------------
-    # Weight Matrices
-    # --------------------------------------
 
-    st.markdown("---")
 
-    st.subheader("Hebb Weight Matrices")
+    except Exception as e:
 
-    for label, weight in zip(network.labels, network.weights):
 
-        st.write(f"### Character : {label}")
+        st.error(
+            "Application Error"
+        )
 
-        st.table(weight.reshape(5, 3))
-
-    # --------------------------------------
-    # Bias Values
-    # --------------------------------------
-
-    st.markdown("---")
-
-    st.subheader("Bias Values")
-
-    bias_df = pd.DataFrame({
-        "Character": network.labels,
-        "Bias": network.bias
-    })
-
-    st.table(bias_df)
-
-    # --------------------------------------
-    # Explanation
-    # --------------------------------------
-
-    st.markdown("---")
-
-    st.subheader("Explanation")
-
-    st.write(f"""
-1. The uploaded image is converted into a **3×5 binary/bipolar pattern**
-   (cropped to the character's bounding box, then resized).
-
-2. The Hebb Network compares this pattern with all trained character patterns.
-
-3. Net values are calculated using
-
-**Net = W·X + B**
-
-where
-
-- W = Weight Vector
-- X = Input Pattern
-- B = Bias
-
-4. The character having the **highest Net Value** is selected.
-
-**Predicted Character = {prediction}**
-""")
+        st.exception(e)
