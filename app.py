@@ -71,10 +71,27 @@ with col2:
              "you can see exactly what the network is seeing."
     )
 
+with st.expander("Advanced: fine-tune preprocessing"):
+    stroke_boost = st.slider(
+        "Stroke Thickness Boost", 0, 5, 2,
+        help="Thickens thin pen/pencil/font strokes before downsizing to "
+             "3x5, so they don't get averaged away to nothing. Increase "
+             "this if characters keep coming out blank or wrong; "
+             "decrease it if strokes are already thick and bars are "
+             "bleeding into each other."
+    )
+    on_threshold = st.slider(
+        "Cell Sensitivity", 0.10, 0.60, 0.30, step=0.05,
+        help="How much of a 3x5 grid cell needs to be covered by the "
+             "stroke for it to count as 'on'. Lower = more sensitive "
+             "(good for faint/thin strokes). Higher = stricter "
+             "(good if you're getting extra noisy pixels)."
+    )
+
 st.caption(
-    "💡 Tip: draw/write your character as a **thick, bold stroke** with "
-    "plenty of contrast against the background, and try to keep it "
-    "roughly centered in the image."
+    "Tip: draw/write your character as a bold stroke with good contrast "
+    "against the background, and try to keep it roughly centered in the "
+    "image."
 )
 
 # ------------------------------------------
@@ -124,30 +141,35 @@ if uploaded_file is not None:
 
     if show_debug:
         sample, cropped, resized = preprocess_image(
-            uploaded_file, mode, invert=invert_colors, debug=True
+            uploaded_file, mode, invert=invert_colors, debug=True,
+            stroke_boost=stroke_boost, on_threshold=on_threshold
         )
 
         st.markdown("---")
         st.subheader("Preprocessing Steps")
 
-        d1, d2 = st.columns(2)
+        d1, d2, d3 = st.columns(3)
         with d1:
-            st.write("**1. Cropped to bounding box**")
+            st.write("**1. Cropped + stroke-boosted**")
             st.image(cropped, width=150, clamp=True)
         with d2:
-            st.write("**2. Resized to 3×5 grid**")
+            st.write("**2. Resized to 3×5**")
             st.image(
                 np.kron(resized, np.ones((20, 20))),
                 width=150,
                 clamp=True
             )
+        with d3:
+            st.write("**3. Raw cell intensity (0-255)**")
+            st.table(resized.astype(int).reshape(5, 3))
 
         # Re-derive the final pattern in the requested mode
         if mode == "Bipolar":
             sample = np.where(sample == 0, -1, 1)
     else:
         sample = preprocess_image(
-            uploaded_file, mode, invert=invert_colors
+            uploaded_file, mode, invert=invert_colors,
+            stroke_boost=stroke_boost, on_threshold=on_threshold
         )
 
     st.markdown("---")
