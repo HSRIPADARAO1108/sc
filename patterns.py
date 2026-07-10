@@ -1,10 +1,7 @@
 import numpy as np
 
 
-# ----------------------------------
-# Binary Patterns
-# 5 rows x 3 columns = 15 pixels
-# ----------------------------------
+# 5 rows x 3 columns = 15 inputs
 
 patterns_binary = {
 
@@ -55,17 +52,14 @@ patterns_binary = {
 
 
 
-# ----------------------------------
-# Bipolar Conversion
-# ----------------------------------
+patterns_bipolar = {
 
-patterns_bipolar = {}
-
-
-for key,value in patterns_binary.items():
-
-    patterns_bipolar[key] = np.where(
-        value==0,
+    key: np.where(
+        value == 0,
         -1,
         1
     )
+
+    for key,value in patterns_binary.items()
+
+}
