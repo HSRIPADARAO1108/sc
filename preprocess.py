@@ -7,42 +7,35 @@ def preprocess_image(
         mode="Binary",
         invert=False,
         debug=False,
-        stroke_boost=0,
-        on_threshold=0.5
-    ):
-    """
-    Convert uploaded character image into 5x3 pattern
-    for Hebb Character Recognition.
+        stroke_boost=1,
+        on_threshold=0.3
+):
 
-    Output:
-    5 rows × 3 columns = 15 pixels
-    """
-
-
-    # -------------------------------
+    # -----------------------------
     # Read Image
-    # -------------------------------
+    # -----------------------------
 
     img = Image.open(uploaded_file).convert("L")
 
 
-    # -------------------------------
-    # Invert if required
-    # -------------------------------
+    # -----------------------------
+    # Invert
+    # -----------------------------
 
     if invert:
+
         img = ImageOps.invert(img)
 
 
 
-    # -------------------------------
-    # Crop Character Region
-    # -------------------------------
+    # -----------------------------
+    # Crop character
+    # -----------------------------
 
     arr = np.array(img)
 
 
-    # Detect dark pixels
+    # Detect foreground
 
     mask = arr < 200
 
@@ -51,54 +44,53 @@ def preprocess_image(
 
         coords = np.argwhere(mask)
 
+        y_min,x_min = coords.min(axis=0)
 
-        y1,x1 = coords.min(axis=0)
-        y2,x2 = coords.max(axis=0)
+        y_max,x_max = coords.max(axis=0)
 
 
         img = img.crop(
             (
-                x1,
-                y1,
-                x2+1,
-                y2+1
+                x_min,
+                y_min,
+                x_max+1,
+                y_max+1
             )
         )
 
 
 
-    # -------------------------------
-    # Add stroke thickness
-    # -------------------------------
+    # -----------------------------
+    # Make strokes thicker
+    # -----------------------------
 
-    if stroke_boost > 0:
+    for i in range(stroke_boost):
 
-        for _ in range(stroke_boost):
-
-            img = img.filter(
-                ImageFilter.MaxFilter(3)
-            )
+        img = img.filter(
+            ImageFilter.MaxFilter(3)
+        )
 
 
 
-    # -------------------------------
-    # Place in square canvas
-    # -------------------------------
+    # -----------------------------
+    # Resize keeping shape
+    # -----------------------------
 
     img.thumbnail(
-        (100,100)
+        (90,90)
     )
 
 
     canvas = Image.new(
         "L",
-        (100,100),
+        (90,90),
         255
     )
 
 
-    x = (100-img.width)//2
-    y = (100-img.height)//2
+    x = (90-img.width)//2
+
+    y = (90-img.height)//2
 
 
     canvas.paste(
@@ -108,78 +100,77 @@ def preprocess_image(
 
 
 
-    # -------------------------------
-    # Convert to binary
-    # -------------------------------
+    # -----------------------------
+    # Threshold
+    # -----------------------------
 
-    arr = np.array(canvas)
+    arr=np.array(canvas)
 
 
-    binary = np.where(
-        arr < 180,
-        255,
+    binary=np.where(
+        arr < 150,
+        1,
         0
-    ).astype(np.uint8)
+    )
 
 
 
-    # -------------------------------
-    # Resize to 3x5
-    # -------------------------------
+    # -----------------------------
+    # Resize to 5x3
+    # -----------------------------
 
-    small = Image.fromarray(binary).resize(
+    small = Image.fromarray(
+        (binary*255).astype(np.uint8)
+    )
+
+
+    small = small.resize(
         (3,5),
-        Image.Resampling.BOX
+        Image.Resampling.BILINEAR
     )
 
 
-    small = np.array(small)
+    small=np.array(small)
 
 
 
-    # -------------------------------
-    # Convert intensity to pattern
-    # -------------------------------
+    # -----------------------------
+    # Cell activation
+    # -----------------------------
 
-    pattern = np.zeros_like(
-        small,
-        dtype=int
-    )
-
-
-    pattern[small >= (255*on_threshold)] = 1
+    pattern=(small > 80).astype(int)
 
 
 
-    # Flatten 15 pixels
+    # Flatten
 
-    pattern = pattern.flatten()
+    pattern=pattern.flatten()
 
 
 
-    # Safety check
+    # Check
 
     if pattern.size != 15:
 
-        raise ValueError(
-            f"Preprocessing failed. Expected 15 pixels but got {pattern.size}"
+        raise Exception(
+            "Invalid pattern size"
         )
 
 
 
-    # -------------------------------
-    # Return
-    # -------------------------------
+    # Debug output
 
     if debug:
 
         return (
             pattern,
             binary,
-            small
+            pattern.reshape(5,3)
         )
 
 
+
+    # Binary output
 
     if mode=="Binary":
 
@@ -187,10 +178,10 @@ def preprocess_image(
 
 
 
-    else:
+    # Bipolar output
 
-        return np.where(
-            pattern==0,
-            -1,
-            1
-        )
+    return np.where(
+        pattern==0,
+        -1,
+        1
+    )
