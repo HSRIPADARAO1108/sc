@@ -10,7 +10,7 @@ from preprocess import preprocess_image
 
 
 # ------------------------------------------
-# Page Setup
+# Configuration
 # ------------------------------------------
 
 st.set_page_config(
@@ -26,15 +26,15 @@ st.set_page_config(
 # ------------------------------------------
 
 st.title(
-    "🧠 Hebb Character Recognition System"
+    "🧠 Hebb Character Recognition"
 )
 
 
 st.write(
 """
-Character Recognition using **Hebb Learning Rule**
+Character recognition using Hebb Learning Rule
 
-Supported Characters:
+Characters:
 
 **L | T | H | I | E**
 """
@@ -46,11 +46,11 @@ st.divider()
 
 
 # ------------------------------------------
-# Mode Selection
+# Mode
 # ------------------------------------------
 
 mode = st.radio(
-    "Select Data Type",
+    "Select Mode",
     [
         "Binary",
         "Bipolar"
@@ -60,49 +60,36 @@ mode = st.radio(
 
 
 # ------------------------------------------
-# Controls
+# Options
 # ------------------------------------------
 
-col1,col2 = st.columns(2)
+invert = st.checkbox(
+    "Invert Image",
+    False
+)
 
 
-with col1:
-
-    invert = st.checkbox(
-        "Invert Image",
-        False
-    )
-
-
-with col2:
-
-    debug = st.checkbox(
-        "Show Processing Steps",
-        True
-    )
+debug = st.checkbox(
+    "Show Preprocessing",
+    True
+)
 
 
 
-with st.expander(
-    "Advanced Settings"
-):
+stroke = st.slider(
+    "Stroke Boost",
+    0,
+    5,
+    1
+)
 
 
-    stroke_boost = st.slider(
-        "Stroke Thickness",
-        0,
-        5,
-        1
-    )
-
-
-    threshold = st.slider(
-        "Cell Threshold",
-        0.1,
-        0.8,
-        0.4,
-        0.05
-    )
+threshold = st.slider(
+    "Threshold",
+    0.1,
+    0.8,
+    0.4
+)
 
 
 
@@ -111,7 +98,7 @@ with st.expander(
 # ------------------------------------------
 
 file = st.file_uploader(
-    "Upload Character Image",
+    "Upload Character",
     type=[
         "png",
         "jpg",
@@ -127,22 +114,18 @@ if file:
     try:
 
 
-        # Show original
-
-        img = Image.open(file)
+        image = Image.open(file)
 
 
         st.image(
-            img,
+            image,
             caption="Original Image",
             width=250
         )
 
 
 
-        # ----------------------------------
-        # Select Patterns
-        # ----------------------------------
+        # Select patterns
 
         if mode=="Binary":
 
@@ -154,9 +137,7 @@ if file:
 
 
 
-        # ----------------------------------
-        # Train Hebb Network
-        # ----------------------------------
+        # Train
 
         network = HebbNetwork()
 
@@ -178,23 +159,24 @@ if file:
                 mode,
                 invert=invert,
                 debug=True,
-                stroke_boost=stroke_boost,
+                stroke_boost=stroke,
                 on_threshold=threshold
             )
 
 
+
             st.divider()
 
+
             st.subheader(
-                "Preprocessing Steps"
+                "Preprocessing"
             )
+
 
 
             c1,c2,c3 = st.columns(3)
 
 
-
-            # Cropped
 
             with c1:
 
@@ -207,7 +189,7 @@ if file:
                 crop=np.array(cropped)
 
 
-                crop = (
+                crop=(
                     crop*255
                 ).astype(
                     np.uint8
@@ -222,17 +204,17 @@ if file:
 
 
 
-            # Grid
-
             with c2:
 
 
                 st.write(
-                    "5 × 3 Grid"
+                    "5×3 Grid"
                 )
 
 
-                grid=np.array(resized)
+                grid=np.array(
+                    resized
+                )
 
 
                 if grid.size==15:
@@ -244,7 +226,7 @@ if file:
                     )
 
 
-                    preview=np.kron(
+                    show=np.kron(
                         grid,
                         np.ones(
                             (
@@ -255,44 +237,31 @@ if file:
                     )
 
 
-                    preview=(
-                        preview*255
+                    show=(
+                        show*255
                     ).astype(
                         np.uint8
                     )
 
 
                     st.image(
-                        preview,
-                        width=150,
-                        clamp=True
+                        show,
+                        width=150
                     )
 
 
-                else:
-
-
-                    st.error(
-                        "Grid size error"
-                    )
-
-
-
-            # Matrix
 
             with c3:
 
 
                 st.write(
-                    "Pixel Matrix"
+                    "Matrix"
                 )
 
 
-                if grid.size==15:
-
-                    st.table(
-                        grid
-                    )
+                st.table(
+                    grid
+                )
 
 
 
@@ -303,7 +272,7 @@ if file:
                 file,
                 mode,
                 invert=invert,
-                stroke_boost=stroke_boost,
+                stroke_boost=stroke,
                 on_threshold=threshold
             )
 
@@ -321,22 +290,13 @@ if file:
 
         if sample.size != 15:
 
-
             st.error(
-f"""
-Invalid input.
-
-Expected 15 pixels
-
-Received {sample.size}
-"""
+                f"Expected 15 pixels but got {sample.size}"
             )
 
             st.stop()
 
 
-
-        # Bipolar conversion
 
         if mode=="Bipolar":
 
@@ -347,10 +307,6 @@ Received {sample.size}
             )
 
 
-
-        # ----------------------------------
-        # Display Input
-        # ----------------------------------
 
         st.divider()
 
@@ -373,7 +329,7 @@ Received {sample.size}
         # Prediction
         # ----------------------------------
 
-        prediction,net_values,confidence = network.predict(
+        prediction,scores,confidence = network.predict(
             sample
         )
 
@@ -402,10 +358,10 @@ Received {sample.size}
         df=pd.DataFrame(
             {
                 "Character":
-                list(net_values.keys()),
+                list(scores.keys()),
 
                 "Score":
-                list(net_values.values())
+                list(scores.values())
             }
         )
 
@@ -421,25 +377,22 @@ Received {sample.size}
 
 
         # ----------------------------------
-        # Weight Matrix
+        # Weight
         # ----------------------------------
 
         st.divider()
 
 
         st.subheader(
-            "Hebb Weight Matrix"
+            "Weight Matrix"
         )
 
 
-        for label,weight in zip(
-            network.labels,
-            network.weights
-        ):
+        for label,weight in network.weights.items():
 
 
             st.write(
-                f"Character : {label}"
+                label
             )
 
 
@@ -449,38 +402,6 @@ Received {sample.size}
                     3
                 )
             )
-
-
-
-        # ----------------------------------
-        # Explanation
-        # ----------------------------------
-
-        st.divider()
-
-
-        st.subheader(
-            "Algorithm"
-        )
-
-
-        st.write(
-f"""
-1. Image is converted into a 5×3 binary pattern.
-
-2. Hebb learning rule calculates weights.
-
-3. Net value:
-
-Net = W × X + B
-
-4. Highest score character is selected.
-
-Final Character:
-
-## {prediction}
-"""
-        )
 
 
 
